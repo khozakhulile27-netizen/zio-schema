@@ -122,6 +122,9 @@ sealed trait DynamicValue {
 }
 
 object DynamicValue {
+  def validate[A](schema: Schema[A]): ZValidation[Any, ValidationError, A] =
+    schema.validate(this)
+
 
   private object FromSchemaAndValue extends SimpleMutableSchemaBasedValueProcessor[DynamicValue] {
     override protected def processPrimitive(value: Any, typ: StandardType[Any]): DynamicValue =
