@@ -22,10 +22,6 @@ sealed trait DynamicValue {
 def toTypedValue[A](implicit schema: Schema[A]): Validation[String, A] = 
     toTypedValueLazyError.left.map(_.message)
   def toTypedValue[A](schema: Schema[A]): Either[String, A] = schema.validate(this)
-    toTypedValueLazyError.toOption
-
-  private def toTypedValueLazyError[A](implicit schema: Schema[A]): validation[DecodeError, A] =
-    (self, schema) match {
       case (DynamicValue.Primitive(value, p), schema.Primitive(p2, _)) if p == p2 =>
        validation.succeed (value.asInstanceOf[A])      case (DynamicValue.Record(_, values), s: Schema.Record[A]) =>
         
