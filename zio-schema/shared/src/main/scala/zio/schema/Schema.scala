@@ -155,9 +155,14 @@ sealed trait Schema[A] {
   ): Schema[B] =
     Schema.Transform[A, B, SourceLocation](self, f, g, annotations, loc)
 
-  def validate(value: A)(implicit schema: Schema[A]): Chunk[ValidationError] = Schema.validate[A](value)
+  
+  def validate(value: A): ZValidation[Any, ValidationError, A] =
+    self.validate(value)(self)
 
-  def validation(validation: Validation[A]): Schema[A] = annotate(zio.schema.annotation.validate(validation))
+  def validation(v: Validation[A]): Schema[A] =
+    Schema.Validate(self, v)
+
+ 
 
   /**
    * Returns a new schema that combines this schema and the specified schema together, modeling
