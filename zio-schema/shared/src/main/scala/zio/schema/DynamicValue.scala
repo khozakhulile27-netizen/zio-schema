@@ -21,11 +21,10 @@ sealed trait DynamicValue {
     }
 def toTypedValue[A](implicit schema: Schema[A]): Validation[String, A] = 
     toTypedValueLazyError.left.map(_.message)
-
-  @scala.annotation.targetName("toTypedValueWithSchema")
   def toTypedValue[A](schema: Schema[A]): Either[String, A] = schema.validate(this)
-    
 
+  @scala.annotation.targetName("toTypedValueGeneric")
+  def toTypedValue: Either[String, Any] = Left("Schema required")
   def toTypedValueOption[A](implicit schema: Schema[A]): Option[A] =
     toTypedValueLazyError.toOption
 
