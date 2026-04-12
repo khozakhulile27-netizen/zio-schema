@@ -46,7 +46,7 @@ sealed trait DynamicValue {
           case Some(caseValue) =>
             value.toTypedValueLazyError(caseValue.schema).asInstanceOf[Either[DecodeError, A]]
           case None => Left(DecodeError.MissingCase(key, s))
-        }
+        )
 
       case (DynamicValue.LeftValue(value), Schema.Either(schema1, _, _)) =>
         value.toTypedValueLazyError(schema1).map(Left(_))
