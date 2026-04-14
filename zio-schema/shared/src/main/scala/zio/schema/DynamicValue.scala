@@ -31,12 +31,16 @@ sealed trait DynamicValue {
       case (DynamicValue.Primitive(value, p), Schema.Primitive(p2, _)) if p == p2 =>
         Validation.succeed(value.asInstanceOf[A])
       case (DynamicValue.Record(_, values), s: Schema.Record[A]) =>
-        Validation.validateAll(s.fields.map { field =>
-          values.get(field.name) match {
-            case Some(dv) => dv.toTypedValueLazyError(field.schema).mapError(e => DecodeError.And(DecodeError.Read(Chunk(field.name), "Field error"), e))
-            case None    => Validation.fail(DecodeError.Read(Chunk(field.name), s"Missing field ${field.name}"))
-          }
-        }).map(fields => s.construct(Chunk.fromIterable(fields)))
+        Validation
+          .validateAll(s.fields.map { field =>
+            values.get(field.name) match {
+              case Some(dv) =>
+                dv.toTypedValueLazyError(field.schema)
+                  .mapError(e => DecodeError.And(DecodeError.Read(Chunk(field.name), "Field error"), e))
+              case None => Validation.fail(DecodeError.Read(Chunk(field.name), s"Missing field ${field.name}"))
+            }
+          })
+          .map(fields => s.construct(Chunk.fromIterable(fields)))
 
       case (DynamicValue.Enumeration(_, (key, value)), s: Schema.Enum[_]) =>
         s.caseOf(key) match {
@@ -106,7 +110,7 @@ sealed trait DynamicValue {
     }
 
   def validate(schema: Schema[_]): scala.Either[Chunk[String], Unit] = {
-    def validateValue(dv: DynamicValue, s: Schema[_]): scala.Either[Chunk[String], Unit] = {
+    def validateValue(dv: DynamicValue, s: Schema[_]): scala.Either[Chunk[String], Unit] =
       (dv, s) match {
         case (DynamicValue.Primitive(value, p), Schema.Primitive(p2, _)) if p == p2 =>
           scala.Right(())
@@ -124,8 +128,9 @@ sealed trait DynamicValue {
         case (DynamicValue.SetValue(values), schema: Schema.Set[_]) =>
           accumulateErrors(values.map(v => validateValue(v, schema.elementSchema)))
         case (DynamicValue.Dictionary(entries), schema: Schema.Map[_, _]) =>
-          accumulateErrors(entries.flatMap { case (k, v) =>
-            scala.List(validateValue(k, schema.keySchema), validateValue(v, schema.valueSchema))
+          accumulateErrors(entries.flatMap {
+            case (k, v) =>
+              scala.List(validateValue(k, schema.keySchema), validateValue(v, schema.valueSchema))
           })
         case (DynamicValue.SomeValue(value), Schema.Optional(optSchema, _)) =>
           validateValue(value, optSchema)
@@ -142,21 +147,22 @@ sealed trait DynamicValue {
         case _ =>
           scala.Left(Chunk(s"Type mismatch between DynamicValue and Schema"))
       }
-    }
 
     def validateRecord(
       values: scala.collection.immutable.ListMap[String, DynamicValue],
       structure: Chunk[Schema.Field[_, _]]
-    ): scala.Either[Chunk[String], Unit] = {
+    ): scala.Either[Chunk[String], Unit] =
       accumulateErrors(structure.map { field =>
         values.get(field.name) match {
           case Some(value) => validateValue(value, field.schema)
-          case None        => if (field.optional) scala.Right(()) else scala.Left(Chunk(s"Missing required field: ${field.name}"))
+          case None =>
+            if (field.optional) scala.Right(()) else scala.Left(Chunk(s"Missing required field: ${field.name}"))
         }
       })
-    }
 
-    def accumulateErrors(validations: Iterable[scala.Either[Chunk[String], Unit]]): scala.Either[Chunk[String], Unit] = {
+    def accumulateErrors(
+      validations: Iterable[scala.Either[Chunk[String], Unit]]
+    ): scala.Either[Chunk[String], Unit] = {
       val errors = Chunk.fromIterable(validations).flatMap {
         case scala.Left(es) => es
         case scala.Right(_) => Chunk.empty
@@ -167,4 +173,3 @@ sealed trait DynamicValue {
     validateValue(self, schema)
   }
 }
-
