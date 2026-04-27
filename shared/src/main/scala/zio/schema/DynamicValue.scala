@@ -1,51 +1,39 @@
 package zio.schema
 
 import zio.Chunk
-import scala.collection.immutable.ListMap
+import zio.schema.DynamicValue._
 
 sealed trait DynamicValue { self =>
 
-  def validate(schema: Schema[_]): scala.Either[Chunk[String], Unit] = {
-    
-    def validateValue(dv: DynamicValue, s: Schema[_]): scala.Either[Chunk[String], Unit] = {
-      (dv, s) match {
-        case (DynamicValue.Primitive(_, p), Schema.Primitive(p2, _)) if p == p2 =>
-          scala.Right(())
-        
-        case (DynamicValue.Record(_, values), s: Schema.Record[_]) =>
-          validateRecord(values, s.fields)
-        
-        case (DynamicValue.Sequence(values), schema: Schema.Sequence[_, _, _]) =>
-          accumulateErrors(values.map(v => validateValue(v, schema.elementSchema)))
-        
-        case (DynamicValue.Error(message), _) =>
-          scala.Left(Chunk(s"DynamicValue error: $message"))
-        
-        case _ =>
-          scala.Left(Chunk(s"Type mismatch between DynamicValue and Schema"))
-      }
-    }
-
-    def validateRecord(
-      values: ListMap[String, DynamicValue],
-      structure: Chunk[Schema.Field[_, _]]
-    ): scala.Either[Chunk[String], Unit] = {
-      accumulateErrors(structure.map { field =>
-        values.get(field.name) match {
-          case Some(value) => validateValue(value, field.schema)
-          case None        => if (field.optional) scala.Right(()) else scala.Left(Chunk(s"Missing: ${field.name}"))
-        }
-      })
-    }
-
-    def accumulateErrors(validations: Iterable[scala.Either[Chunk[String], Unit]]): scala.Either[Chunk[String], Unit] = {
-      val errors = Chunk.fromIterable(validations).flatMap {
-        case scala.Left(es) => es
-        case scala.Right(_) => Chunk.empty
-      }
-      if (errors.isEmpty) scala.Right(()) else scala.Left(errors)
-    }
-
+  def validate(schema: Schema[_]): scala.Either[Chunk[String], Unit] =
     validateValue(self, schema)
+
+  private def validateValue(dv: DynamicValue, s: Schema[_]): scala.Either[Chunk[String], Unit] =
+    (dv, s) match {
+      case (DynamicValue.Primitive(p, t), Schema.Primitive(_, _)) =>
+        scala.Right(())
+      case (DynamicValue.Record(_, values), schema: Schema.Record[_]) =>
+        validateRecord(values, schema.fields)
+      case (DynamicValue.Sequence(values), schema: Schema.Sequence[_, _, _]) =>
+        val errors = values.flatMap(v => validateValue(v, schema.elementSchema) match {
+          case scala.Left(es) => es
+          case scala.Right(_) => Chunk.empty
+        })
+        if (errors.isEmpty) scala.Right(()) else scala.Left(errors)
+      case _ => scala.Left(Chunk(s"Value $dv does not match schema $s"))
+    }
+
+  private def validateRecord(values: Map[String, DynamicValue], fields: Chunk[Schema.Field[_, _]]): scala.Either[Chunk[String], Unit] = {
+    val errors = fields.flatMap { field =>
+      values.get(field.name) match {
+        case Some(v) => validateValue(v, field.schema) match {
+          case scala.Left(es) => es
+          case scala.Right(_) => Chunk.empty
+        }
+        case None => Chunk(s"Field ${field.name} is missing")
+      }
+    }
+    if (errors.isEmpty) scala.Right(()) else scala.Left(errors)
   }
 }
+
